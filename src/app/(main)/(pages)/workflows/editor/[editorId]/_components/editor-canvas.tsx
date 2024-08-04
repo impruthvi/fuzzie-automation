@@ -1,7 +1,8 @@
 "use client";
-
+import { EditorCanvasCardType, EditorNodeType } from "@/lib/types";
+import { useEditor } from "@/providers/editor-provider";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
+import ReactFlow, {
   Background,
   Connection,
   Controls,
@@ -13,16 +14,8 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
-  ReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { v4 } from "uuid";
-import {
-  EditorCanvasCardType,
-  EditorCanvasDefaultCardTypes,
-  EditorNodeType,
-} from "@/lib/types";
-import { useEditor } from "@/providers/editor-provider";
 import EditorCanvasCardSingle from "./editor-canvas-card-single";
 import {
   ResizableHandle,
@@ -31,8 +24,11 @@ import {
 } from "@/components/ui/resizable";
 import { toast } from "sonner";
 import { usePathname } from "next/navigation";
+import { v4 } from "uuid";
+import { EditorCanvasDefaultCardTypes } from "@/lib/constant";
 import FlowInstance from "./flow-instance";
 import EditorCanvasSidebar from "./editor-canvas-sidebar";
+import { onGetNodesEdges } from "../../../_actions/workflow-connections";
 
 type Props = {};
 
@@ -42,9 +38,9 @@ const initialEdges: { id: string; source: string; target: string }[] = [];
 
 const EditorCanvas = (props: Props) => {
   const { dispatch, state } = useEditor();
-  const [isWorkFlowLoading, setIsWorkFlowLoading] = useState<boolean>(false);
-  const [nodes, setNodes] = useState<EditorNodeType[]>(initialNodes);
+  const [nodes, setNodes] = useState(initialNodes);
   const [edges, setEdges] = useState(initialEdges);
+  const [isWorkFlowLoading, setIsWorkFlowLoading] = useState<boolean>(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance>();
   const pathname = usePathname();
@@ -124,6 +120,27 @@ const EditorCanvas = (props: Props) => {
     [reactFlowInstance, state]
   );
 
+  const handleClickCanvas = () => {
+    dispatch({
+      type: "SELECTED_ELEMENT",
+      payload: {
+        element: {
+          data: {
+            completed: false,
+            current: false,
+            description: "",
+            metadata: {},
+            title: "",
+            type: "Trigger",
+          },
+          id: "",
+          position: { x: 0, y: 0 },
+          type: "Trigger",
+        },
+      },
+    });
+  };
+
   useEffect(() => {
     dispatch({ type: "LOAD_DATA", payload: { edges, elements: nodes } });
   }, [nodes, edges]);
@@ -146,26 +163,20 @@ const EditorCanvas = (props: Props) => {
     []
   );
 
-  const handleClickCanvas = () => {
-    dispatch({
-      type: "SELECTED_ELEMENT",
-      payload: {
-        element: {
-          data: {
-            completed: false,
-            current: false,
-            description: "",
-            metadata: {},
-            title: "",
-            type: "Trigger",
-          },
-          id: "",
-          position: { x: 0, y: 0 },
-          type: "Trigger",
-        },
-      },
-    });
+  const onGetWorkFlow = async () => {
+    setIsWorkFlowLoading(true);
+    const response = await onGetNodesEdges(pathname.split("/").pop()!);
+    if (response) {
+      setEdges(JSON.parse(response.edges!));
+      setNodes(JSON.parse(response.nodes!));
+      setIsWorkFlowLoading(false);
+    }
+    setIsWorkFlowLoading(false);
   };
+
+  useEffect(() => {
+    onGetWorkFlow();
+  }, []);
 
   return (
     <ResizablePanelGroup direction="horizontal">
@@ -228,7 +239,6 @@ const EditorCanvas = (props: Props) => {
         </div>
       </ResizablePanel>
       <ResizableHandle />
-
       <ResizablePanel defaultSize={40} className="relative sm:block">
         {isWorkFlowLoading ? (
           <div className="absolute flex h-full w-full items-center justify-center">
